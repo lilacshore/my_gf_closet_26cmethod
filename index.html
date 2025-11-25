@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🧣 26度穿衣法则助手</title>
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Tailwind CSS (用于快速美化) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts 字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans SC', sans-serif; background-color: #fdf2f8; } /* 粉色系背景 */
+        .item-card { transition: all 0.2s; }
+        .item-card:active { transform: scale(0.95); }
+        /* 隐藏滚动条但保留功能 */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-gray-700">
+
+<div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl flex flex-col relative">
+    
+    <!-- 顶部：输入与目标 -->
+    <div class="bg-gradient-to-b from-pink-300 to-pink-100 p-6 rounded-b-[30px] shadow-md z-10 sticky top-0">
+        <h1 class="text-xl font-bold text-pink-800 text-center mb-4">🧥 26°C 穿衣法则计算器</h1>
+        
+        <div class="bg-white/80 backdrop-blur rounded-2xl p-4 shadow-sm">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-sm font-bold text-gray-500">当前气温 (°C)</label>
+                <span class="text-xs text-pink-500 bg-pink-100 px-2 py-1 rounded-full">目标: 26°C</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <input type="number" v-model="temperature" @input="calculateTarget" 
+                       class="w-full text-3xl font-bold text-center border-b-2 border-pink-300 focus:border-pink-500 outline-none bg-transparent py-2" 
+                       placeholder="输入气温">
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+                <div>
+                    <p class="text-xs text-gray-500">需要补齐保暖度</p>
+                    <p class="text-2xl font-bold text-indigo-600">{{ targetWarmth > 0 ? targetWarmth : 0 }}°C</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-500">当前已选</p>
+                    <p class="text-2xl font-bold" :class="statusColor">{{ currentWarmth }}°C</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态提示条 -->
+        <div v-if="temperature" class="mt-3 text-center text-sm font-medium py-2 px-4 rounded-xl transition-colors duration-300" :class="statusBg">
+            {{ statusMessage }}
+        </div>
+    </div>
+
+    <!-- 中间：衣物选择区 -->
+    <div class="flex-1 p-4 overflow-y-auto hide-scrollbar pb-32">
+        <div v-for="(items, category) in groupedClothes" :key="category" class="mb-6">
+            <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">{{ categoryNames[category] }}</h3>
+            <div class="grid grid-cols-3 gap-3">
+                <div v-for="item in items" :key="item.name" 
+                     @click="toggleItem(item)"
+                     class="item-card p-3 rounded-xl border text-center cursor-pointer select-none flex flex-col items-center justify-center h-24 relative"
+                     :class="item.selected ? 'bg-pink-500 border-pink-600 text-white shadow-lg shadow-pink-200' : 'bg-gray-50 border-gray-100 text-gray-600'">
+                    
+                    <!-- 选中时的小勾勾 -->
+                    <div v-if="item.selected" class="absolute top-1 right-1 bg-white text-pink-500 rounded-full w-4 h-4 flex items-center justify-center text-[10px]">✓</div>
+                    
+                    <span class="text-2xl mb-1">{{ item.icon }}</span>
+                    <span class="text-xs font-medium truncate w-full">{{ item.name }}</span>
+                    <span class="text-xs opacity-80 mt-1">+{{ item.warmth }}°C</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部：重置按钮 -->
+    <div class="absolute bottom-6 left-0 right-0 px-6 flex justify-center z-20 pointer-events-none">
+        <button @click="reset" v-if="currentWarmth > 0" 
+                class="pointer-events-auto bg-white text-gray-500 hover:text-pink-500 shadow-lg border border-gray-200 px-6 py-2 rounded-full text-sm font-bold transition-all transform hover:scale-105 flex items-center gap-2">
+            <span>🔄</span> 一键重置搭配
+        </button>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, ref, computed, reactive } = Vue;
+
+    createApp({
+        setup() {
+            // 1. 核心数据
+            const temperature = ref(''); // 当前气温
+            
+            // 数据库：增加了 icon 让界面更可爱
+            const clothesDB = [
+                { name: "T恤", warmth: 1, category: "top", icon: "👕" },
+                { name: "衬衫", warmth: 2, category: "top", icon: "👔" },
+                { name: "薄针织衫", warmth: 3, category: "mid", icon: "🧶" },
+                { name: "卫衣", warmth: 4, category: "mid", icon: "👘" },
+                { name: "羊毛衫", warmth: 7, category: "mid", icon: "🐑" },
+                { name: "风衣", warmth: 5, category: "outer", icon: "🧥" },
+                { name: "轻薄羽绒", warmth: 9, category: "outer", icon: "☁️" },
+                { name: "厚羽绒服", warmth: 15, category: "outer", icon: "⛄" },
+                { name: "薄光腿神器", warmth: 4, category: "bottom", icon: "🦵" },
+                { name: "厚光腿神器", warmth: 7, category: "bottom", icon: "👖" },
+                { name: "牛仔裤", warmth: 3, category: "bottom", icon: "👖" },
+                { name: "围巾", warmth: 3, category: "accessory", icon: "🧣" },
+                { name: "帽子", warmth: 2, category: "accessory", icon: "🧢" },
+                { name: "普通袜子", warmth: 1, category: "shoe", icon: "🧦" },
+                { name: "羊毛袜", warmth: 2, category: "shoe", icon: "👣" }
+            ];
+
+            // 将数据库转换为响应式状态，并添加 selected 属性
+            const clothes = reactive(clothesDB.map(c => ({ ...c, selected: false })));
+
+            // 分类映射名称
+            const categoryNames = {
+                top: "内搭 / 上装",
+                mid: "中层保暖",
+                outer: "外套",
+                bottom: "下装",
+                accessory: "配饰",
+                shoe: "鞋袜"
+            };
+
+            // 2. 计算属性
+            // 计算目标保暖度
+            const targetWarmth = computed(() => {
+                if (temperature.value === '') return 0;
+                const target = 26 - parseInt(temperature.value);
+                return target > 0 ? target : 0;
+            });
+
+            // 计算当前已选保暖度
+            const currentWarmth = computed(() => {
+                return clothes.filter(c => c.selected).reduce((sum, item) => sum + item.warmth, 0);
+            });
+
+            // 按分类分组数据
+            const groupedClothes = computed(() => {
+                const groups = {};
+                // 按照特定顺序排列
+                const order = ['top', 'mid', 'outer', 'bottom', 'accessory', 'shoe'];
+                order.forEach(key => groups[key] = []);
+                
+                clothes.forEach(item => {
+                    if (groups[item.category]) {
+                        groups[item.category].push(item);
+                    }
+                });
+                return groups;
+            });
+
+            // 3. 状态反馈逻辑 (核心体验点)
+            const statusMessage = computed(() => {
+                if (temperature.value === '') return "请先输入今天的气温哦~ 👇";
+                
+                const diff = currentWarmth.value - targetWarmth.value;
+                
+                if (Math.abs(diff) <= 1) return "🎉 完美！这就是今天的最佳搭配！";
+                if (diff > 1 && diff <= 4) return "🔥 稍微有点暖和，怕冷的话正好！";
+                if (diff > 4) return "🥵 可能会热哦，要不要减一件？";
+                if (diff < 0 && diff >= -2) return "❄️ 稍微有点凉，建议再加个配饰？";
+                if (diff < -2) return "🥶 还要再多穿点！会感冒的！";
+                return "请选择衣物进行搭配";
+            });
+
+            const statusColor = computed(() => {
+                if (temperature.value === '') return "text-gray-400";
+                const diff = currentWarmth.value - targetWarmth.value;
+                if (Math.abs(diff) <= 1) return "text-green-500"; // 完美
+                if (diff > 0) return "text-orange-500"; // 热
+                return "text-blue-500"; // 冷
+            });
+
+            const statusBg = computed(() => {
+                if (temperature.value === '') return "bg-gray-100 text-gray-500";
+                const diff = currentWarmth.value - targetWarmth.value;
+                if (Math.abs(diff) <= 1) return "bg-green-100 text-green-600";
+                if (diff > 1) return "bg-orange-100 text-orange-600";
+                if (diff < 0) return "bg-blue-100 text-blue-600";
+                return "bg-gray-100";
+            });
+
+            // 4. 方法
+            const toggleItem = (item) => {
+                item.selected = !item.selected;
+            };
+
+            const reset = () => {
+                clothes.forEach(c => c.selected = false);
+            };
+
+            const calculateTarget = () => {
+                // 输入时自动触发重置比较好，或者保留上次搭配，这里保留搭配更人性化
+            };
+
+            return {
+                temperature,
+                clothes,
+                groupedClothes,
+                categoryNames,
+                targetWarmth,
+                currentWarmth,
+                toggleItem,
+                reset,
+                statusMessage,
+                statusColor,
+                statusBg
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
